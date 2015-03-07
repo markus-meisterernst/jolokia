@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.*;
 
 import javax.management.MalformedObjectNameException;
@@ -21,6 +23,7 @@ import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
 import static org.testng.AssertJUnit.assertEquals;
+import static org.testng.AssertJUnit.assertNotNull;
 import static org.testng.AssertJUnit.assertNull;
 
 
@@ -267,5 +270,86 @@ public class StringToObjectConverterTest {
         list.add(10);
         list.add(null);
         converter.prepareValue("[I",list);
+    }
+    
+    public static class Example {
+    	private String value;
+    	private List<String> list;
+    	
+    	public Example(String value) { this.value = value; }
+    	public Example(List<String> list) { this.list = list; }
+    	
+    	public String getValue() { return value; }
+    	public List<String> getList() { return list; }
+    }
+    
+    public static class PrivateExample {
+    	private String value;
+    	private PrivateExample(String value) { this.value = value; }
+    	public String getValue() { return value; }
+    }
+    
+    public static class MultipleConstructorExample {
+    	private String value;
+    	private List<String> list;
+    	
+    	public MultipleConstructorExample(String value, List<String> list) { 
+    		this.value = value;
+    		this.list = list;
+    	}
+    	
+    	public String getValue() { return value; }
+    	public List<String> getList() { return list; }
+    }
+    
+    @Test
+    public void prepareValueWithConstructor() {
+    	Object o = converter.prepareValue(this.getClass().getCanonicalName() + "$Example", "test");
+    	assertTrue(o instanceof Example);
+    	assertEquals("test", ((Example)o).getValue());
+    }
+    
+    @Test
+    public void prepareValueWithConstructorList() {
+    	Object o = converter.prepareValue(this.getClass().getCanonicalName() + "$Example", Arrays.asList("test"));
+    	assertTrue(o instanceof Example);
+    	assertNull(((Example)o).getList());
+    	assertEquals("[test]", ((Example)o).getValue());
+    }
+    
+    @Test(expectedExceptions = IllegalArgumentException.class, 
+    	  expectedExceptionsMessageRegExp = "Cannot convert string test to type "
+      	  		+ "org.jolokia.converter.object.StringToObjectConverterTest\\$PrivateExample "
+      	  		+ "because no converter could be found")
+    public void prepareValueWithPrivateExample() {
+    	converter.prepareValue(this.getClass().getCanonicalName() + "$PrivateExample", "test");
+    }
+
+    @Test(expectedExceptions = IllegalArgumentException.class,
+    	  expectedExceptionsMessageRegExp = "Cannot convert string test to type "
+    	  		+ "org.jolokia.converter.object.StringToObjectConverterTest\\$MultipleConstructorExample "
+    	  		+ "because no converter could be found")
+    public void prepareValueWithMultipleConstructors() {
+    	converter.prepareValue(this.getClass().getCanonicalName() + "$MultipleConstructorExample", "test");
+    }
+    
+    @Test
+    public void dateConversionNotByConstructor() throws ParseException {
+    	final String dateStr = "2015-11-20T00:00:00+00:00";
+    	
+    	try {
+    		new Date(dateStr);
+    		fail("Should have throw IllegalArgumentException");
+    	} catch (IllegalArgumentException ignore) {}
+    	
+    	// new Date(dateStr) will throw IllegalArgumentException but our convert does not. 
+    	// so it does not use Constructor to convert date
+    	Object obj = converter.convertFromString(Date.class.getCanonicalName(), dateStr);
+    	assertNotNull(obj);
+    	assertTrue(obj instanceof Date);
+
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ");
+    	Date expectedDate = sdf.parse(dateStr.replaceFirst("\\+(0\\d)\\:(\\d{2})$", "+$1$2"));
+    	assertEquals(expectedDate, obj);
     }
 }
